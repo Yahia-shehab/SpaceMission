@@ -1373,7 +1373,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.3, y: -2.3, z: 0.5}
-  m_LocalScale: {x: 5.2, y: 0.65, z: 0.1}
+  m_LocalScale: {x: 5.6679997, y: 0.65, z: 0.1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 417627504}
@@ -4882,6 +4882,14 @@ MonoBehaviour:
   - 650
   - 1200
   - 2200
+  targetBudgetMillion:
+  - 1000
+  - 1400
+  - 1850
+  targetScienceGoals:
+  - 80
+  - 120
+  - 180
   maxBudgetMillion: 850
   remainingBudgetMillion: 182.5
   targetSciencePts: 80
@@ -5166,6 +5174,7 @@ MonoBehaviour:
   btnTargetLabel: {fileID: 638394971}
   btnRocketLabel: {fileID: 490283935}
   statusCardRenderer: {fileID: 550991637}
+  activePartsTab: 0
 --- !u!4 &417627504
 Transform:
   m_ObjectHideFlags: 0
@@ -6467,7 +6476,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &500549246
 Transform:
   m_ObjectHideFlags: 0
@@ -8972,7 +8981,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &753011355
 Transform:
   m_ObjectHideFlags: 0
@@ -9181,7 +9190,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &762788476
 Transform:
   m_ObjectHideFlags: 0
@@ -11032,7 +11041,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.3, y: -2.36, z: 0.55}
-  m_LocalScale: {x: 5.2799997, y: 0.72999996, z: 0.1}
+  m_LocalScale: {x: 5.7552, y: 0.72999996, z: 0.1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 417627504}
@@ -18905,13 +18914,13 @@ TextMesh:
 
     2. Cost:   $668M / $850M [PASS]
 
-    3.
-    Mass:   1205 / 1200 kg [HEAVY!]
+    3. Mass:  
+    1205 / 1200 kg [HEAVY!]
 
     4. Thrust: 2289 / 1600 m/s [PASS]
 
-    5.
-    Power:  +20W (Bat: 410Wh) [PASS]
+    5. Power: 
+    +20W (Bat: 410Wh) [PASS]
 
     6. Engine: Installed [PASS] | Comms: [PASS]
 
@@ -23562,7 +23571,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &2020215102
 Transform:
   m_ObjectHideFlags: 0
