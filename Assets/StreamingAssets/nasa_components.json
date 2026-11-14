@@ -1,0 +1,64 @@
+{
+  "components": [
+    {
+      "partName": "DSCOVR Solar Array",
+      "category": "Power",
+      "mass": 120.0,
+      "cost": 45000000.0,
+      "powerOutput": 600.0,
+      "powerConsumption": 0.0,
+      "scienceValue": 0.0,
+      "description": "High-efficiency triple-junction solar panel array."
+    },
+    {
+      "partName": "Li-Ion Battery Block",
+      "category": "Power",
+      "mass": 85.0,
+      "cost": 20000000.0,
+      "powerOutput": 150.0,
+      "powerConsumption": 10.0,
+      "scienceValue": 0.0,
+      "description": "Secondary energy storage for eclipse phases."
+    },
+    {
+      "partName": "High-Gain X-Band Antenna",
+      "category": "Communications",
+      "mass": 95.0,
+      "cost": 65000000.0,
+      "powerOutput": 0.0,
+      "powerConsumption": 180.0,
+      "scienceValue": 25.0,
+      "description": "Deep space telemetry and high-rate science downlink."
+    },
+    {
+      "partName": "Multi-Spectral Imager (EPIC)",
+      "category": "Payload",
+      "mass": 210.0,
+      "cost": 180000000.0,
+      "powerOutput": 0.0,
+      "powerConsumption": 220.0,
+      "scienceValue": 55.0,
+      "description": "10-channel spectroradiometer for planetary observation."
+    },
+    {
+      "partName": "Ion Thruster Propulsion Module",
+      "category": "Propulsion",
+      "mass": 450.0,
+      "cost": 250000000.0,
+      "powerOutput": 0.0,
+      "powerConsumption": 300.0,
+      "scienceValue": 20.0,
+      "description": "Solar electric propulsion for orbital station-keeping and Delta-V."
+    },
+    {
+      "partName": "Thermal Magnetometer",
+      "category": "Payload",
+      "mass": 65.0,
+      "cost": 55000000.0,
+      "powerOutput": 0.0,
+      "powerConsumption": 75.0,
+      "scienceValue": 30.0,
+      "description": "Measures magnetic field vectors and solar wind."
+    }
+  ]
+}

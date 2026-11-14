@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "650342461903",
+    "project_id": "spacemission-6da58",
+    "storage_bucket": "spacemission-6da58.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:650342461903:android:3ac2e033e965ec89eb62ba",
+        "android_client_info": {
+          "package_name": "com.yahia.spacemission"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA2aFQ3bvOqfUje6ODrVtWBWB0QpMNeOx8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
