@@ -202,8 +202,70 @@ public class SpaceMissionPrototype : MonoBehaviour
     private readonly float OrbitCenterY = 26.5f;
     private readonly float OrbitRadius = 1.35f;
 
+    void Awake()
+    {
+        if (spacecraftHub == null) spacecraftHub = transform.Find("Spacecraft_Bus_Hub");
+        if (topBarDisplay == null)
+        {
+            Transform t = transform.Find("Top_Bar_Text");
+            if (t != null) topBarDisplay = t.GetComponent<TextMesh>();
+        }
+        if (telemetryDisplay == null)
+        {
+            Transform t = transform.Find("Telemetry_Text_Object");
+            if (t != null) telemetryDisplay = t.GetComponent<TextMesh>();
+        }
+        if (statusDisplay == null)
+        {
+            Transform t = transform.Find("Mission_Status_Text_Object");
+            if (t != null) statusDisplay = t.GetComponent<TextMesh>();
+        }
+        if (configDisplay == null)
+        {
+            Transform t = transform.Find("Config_Selection_Text");
+            if (t != null) configDisplay = t.GetComponent<TextMesh>();
+        }
+        if (mapTargetLabel == null)
+        {
+            Transform t = transform.Find("Map_Target_Label");
+            if (t != null) mapTargetLabel = t.GetComponent<TextMesh>();
+        }
+        if (statusCardRenderer == null)
+        {
+            Transform t = transform.Find("Status_Display_Board");
+            if (t != null) statusCardRenderer = t.GetComponent<Renderer>();
+        }
+    }
+
+    private void EnsureSceneButtonColliders()
+    {
+        string[] btnNames = {
+            "BTN_LaunchSim", "BTN_Reset", "BTN_CycleTarget", "BTN_CycleRocket", "BTN_MoreFuel", "BTN_LessFuel"
+        };
+        foreach (string bName in btnNames)
+        {
+            Transform b = transform.Find(bName);
+            if (b != null)
+            {
+                Collider oldC = b.GetComponent<Collider>();
+                if (oldC != null && !(oldC is BoxCollider))
+                {
+                    Destroy(oldC);
+                    BoxCollider bc = b.gameObject.AddComponent<BoxCollider>();
+                    bc.size = new Vector3(1f, 1f, 4.0f);
+                }
+                else if (oldC == null)
+                {
+                    BoxCollider bc = b.gameObject.AddComponent<BoxCollider>();
+                    bc.size = new Vector3(1f, 1f, 4.0f);
+                }
+            }
+        }
+    }
+
     void Start()
     {
+        EnsureSceneButtonColliders();
         // Automatically finds Mission_Corridor_Map even when it is unchecked/hidden!
         missionCorridorMap = transform.Find("Mission_Corridor_Map");
         if (missionCorridorMap != null) missionCorridorMap.gameObject.SetActive(false);
@@ -265,7 +327,10 @@ public class SpaceMissionPrototype : MonoBehaviour
         InitProceduralAudio();
         InitCrises();
         ResetToAssembly();
-        ShowTitleScreen();
+        if (!Application.CanStreamedLevelBeLoaded("MainMenuScene"))
+        {
+            ShowTitleScreen();
+        }
     }
 
     private void SetupAttachedSprites()
@@ -413,6 +478,7 @@ public class SpaceMissionPrototype : MonoBehaviour
                 Color c = r.material.color;
                 c.a = alpha;
                 SetRendererColor(r, c);
+                if (r.material.HasProperty("_BaseColor")) r.material.SetColor("_BaseColor", c);
             }
         }
         if (fairingHalfRight != null)
@@ -422,6 +488,7 @@ public class SpaceMissionPrototype : MonoBehaviour
                 Color c = r.material.color;
                 c.a = alpha;
                 SetRendererColor(r, c);
+                if (r.material.HasProperty("_BaseColor")) r.material.SetColor("_BaseColor", c);
             }
         }
     }
@@ -475,9 +542,10 @@ public class SpaceMissionPrototype : MonoBehaviour
         if (spacecraftHub == null) return;
         float currentY = spacecraftHub.localPosition.y;
         bool isAscending = (currentPhase == MissionPhase.Launching || currentPhase == MissionPhase.FlightCrisis);
+        bool hasFairing = (parts != null && parts.Count > 11 && parts[11] != null && parts[11].isInstalled);
 
-        // 1. FAIRING JETTISON AT VACUUM THRESHOLD (Above Max-Q: Y >= 9.2f)
-        if (isAscending && currentY >= 9.2f && !fairingJettisoned)
+        // 1. FAIRING JETTISON AT VACUUM THRESHOLD (Above Max-Q: Y >= 12.2f or fallback Y >= 13.0f)
+        if (isAscending && hasFairing && (currentY >= 13.0f || (stage1Separated && currentY >= 12.2f)) && !fairingJettisoned)
         {
             fairingJettisoned = true;
             fairingJettisonTimer = 0f;
@@ -509,6 +577,8 @@ public class SpaceMissionPrototype : MonoBehaviour
                     fairingHalfLeft.gameObject.SetActive(false);
                 if (fairingHalfRight != null && fairingHalfRight.gameObject.activeSelf)
                     fairingHalfRight.gameObject.SetActive(false);
+                if (fairingShell != null && fairingShell.gameObject.activeSelf)
+                    fairingShell.gameObject.SetActive(false);
             }
 
             // Smoothly roll out ROSA solar wings in space vacuum!
@@ -518,8 +588,9 @@ public class SpaceMissionPrototype : MonoBehaviour
         // Apply solar array wing deployment scale
         if (parts != null && parts.Count > 0 && parts[0] != null && parts[0].partTransform != null)
         {
+            float targetDeploy = hasFairing ? solarDeployProgress : 1.0f;
             float foldedX = parts[0].mountedScale.x * 0.18f;
-            float targetX = Mathf.Lerp(foldedX, parts[0].mountedScale.x, Mathf.SmoothStep(0f, 1f, solarDeployProgress));
+            float targetX = Mathf.Lerp(foldedX, parts[0].mountedScale.x, Mathf.SmoothStep(0f, 1f, targetDeploy));
             parts[0].partTransform.localScale = new Vector3(targetX, parts[0].mountedScale.y, parts[0].mountedScale.z);
         }
 
@@ -1165,16 +1236,19 @@ public class SpaceMissionPrototype : MonoBehaviour
 
         if (magnetometerTransform != null) magnetometerTransform.gameObject.SetActive(hasMag);
 
-        if (fairingHalfLeft != null && fairingHalfRight != null)
+        if (fairingShell == null || fairingHalfLeft == null || fairingHalfRight == null)
         {
-            bool showFairing = hasFairing && !fairingJettisoned;
-            fairingHalfLeft.gameObject.SetActive(showFairing);
-            fairingHalfRight.gameObject.SetActive(showFairing);
-            if (showFairing)
-            {
-                float alpha = (currentPhase == MissionPhase.Assembly) ? 0.25f : 1.0f;
-                SetFairingOpacity(alpha);
-            }
+            EnsureFairingHalvesCreated();
+        }
+
+        bool showFairing = hasFairing && !fairingJettisoned;
+        if (fairingShell != null) fairingShell.gameObject.SetActive(showFairing);
+        if (fairingHalfLeft != null) fairingHalfLeft.gameObject.SetActive(showFairing);
+        if (fairingHalfRight != null) fairingHalfRight.gameObject.SetActive(showFairing);
+        if (showFairing)
+        {
+            float alpha = (currentPhase == MissionPhase.Assembly) ? 0.25f : 1.0f;
+            SetFairingOpacity(alpha);
         }
 
         // Update parts 0..6
@@ -1549,11 +1623,12 @@ public class SpaceMissionPrototype : MonoBehaviour
         flightConsoleGroup.SetActive(isFlight);
         if (!isFlight) return;
 
-        // Follow camera vertically docked cleanly at bottom regardless of camera zoom
+        // Follow camera vertically docked cleanly at bottom regardless of camera zoom & screen shake
+        float camX = Camera.main.transform.position.x;
         float camY = Camera.main.transform.position.y;
         float camOrtho = Camera.main.orthographicSize;
         float bottomY = camY - camOrtho;
-        flightConsoleGroup.transform.position = new Vector3(-0.3f, bottomY + 0.95f, -2.5f);
+        flightConsoleGroup.transform.position = new Vector3(camX, bottomY + 0.95f, -2.5f);
 
         float currentY = spacecraftHub != null ? spacecraftHub.localPosition.y : LaunchpadY;
 
@@ -1721,12 +1796,6 @@ public class SpaceMissionPrototype : MonoBehaviour
             fairingJettisonTimer = 0f;
             PlayStagingAudio();
             PlaySolarDeployAudio();
-            solarDeployProgress = 1.0f;
-
-            if (parts != null && parts.Count > 0 && parts[0] != null && parts[0].partTransform != null)
-            {
-                parts[0].partTransform.localScale = parts[0].mountedScale;
-            }
 
             SetStatusBanner("PAYLOAD FAIRING JETTISONED!",
                 "Fairing halves cleared payload. Scientific solar arrays deployed!", DuoGreen);
@@ -1840,6 +1909,7 @@ public class SpaceMissionPrototype : MonoBehaviour
             "BTN_StripAll", "BTN_StripAll_Border", "BTN_StripAll_Label",
             "BTN_Manual", "BTN_Manual_Border", "BTN_Manual_Label",
             "BTN_Home", "BTN_Home_Border", "BTN_Home_Label",
+            "BTN_TestCruise", "BTN_TestCruise_Border", "BTN_TestCruise_Label",
             "Custom_Launch_Gantry"
         };
         foreach (string objName in uiToHide)
@@ -1869,6 +1939,11 @@ public class SpaceMissionPrototype : MonoBehaviour
 
     private void UpdateCameraFollow(float dt)
     {
+        if (InterplanetaryCruiseManager.Instance != null && (InterplanetaryCruiseManager.Instance.isCruiseActive || InterplanetaryCruiseManager.Instance.IsLoadingActive))
+        {
+            return;
+        }
+
         if (Camera.main == null || spacecraftHub == null) return;
 
         bool inFlight = (currentPhase != MissionPhase.Assembly && currentPhase != MissionPhase.TitleScreen);
@@ -1899,25 +1974,26 @@ public class SpaceMissionPrototype : MonoBehaviour
             Transform topBorder = transform.Find("Top_Budget_Fuel_Box_Border");
             Transform topText = transform.Find("Top_Bar_Text");
 
+            float camX = Camera.main.transform.position.x;
             float camOrtho = Camera.main.orthographicSize;
             float topY = camY + camOrtho;
 
             if (topBox != null)
             {
                 if (!topBox.gameObject.activeSelf) topBox.gameObject.SetActive(true);
-                topBox.localPosition = new Vector3(-0.3f, topY - 0.58f, -2.5f);
+                topBox.localPosition = new Vector3(camX, topY - 0.58f, -2.5f);
                 topBox.localScale = new Vector3(11.2f, 1.25f, 0.1f);
             }
             if (topBorder != null)
             {
                 if (!topBorder.gameObject.activeSelf) topBorder.gameObject.SetActive(true);
-                topBorder.localPosition = new Vector3(-0.3f, topY - 0.58f, -2.45f);
+                topBorder.localPosition = new Vector3(camX, topY - 0.58f, -2.45f);
                 topBorder.localScale = new Vector3(11.36f, 1.35f, 0.1f);
             }
             if (topText != null)
             {
                 if (!topText.gameObject.activeSelf) topText.gameObject.SetActive(true);
-                topText.localPosition = new Vector3(-0.3f, topY - 0.58f, -2.6f);
+                topText.localPosition = new Vector3(camX, topY - 0.58f, -2.6f);
                 if (topBarDisplay != null)
                 {
                     topBarDisplay.characterSize = 0.046f;
@@ -2038,9 +2114,40 @@ public class SpaceMissionPrototype : MonoBehaviour
 
     void Update()
     {
+        if (InterplanetaryCruiseManager.Instance != null && (InterplanetaryCruiseManager.Instance.isCruiseActive || InterplanetaryCruiseManager.Instance.IsLoadingActive))
+        {
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                ResetToAssembly();
+            }
+            return;
+        }
+
         if (Input.GetMouseButtonDown(0) && Camera.main != null)
         {
             HandleScreenClick();
+        }
+
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (manualModalObj != null && manualModalObj.activeSelf)
+            {
+                CloseFlightManual();
+            }
+            else if (currentPhase == MissionPhase.TitleScreen)
+            {
+                StartMissionFromTitle();
+            }
+            else if (currentPhase != MissionPhase.Assembly)
+            {
+                ResetToAssembly();
+            }
+        }
+
+        if (currentPhase == MissionPhase.Assembly)
+        {
+            if (Input.GetKeyDown(KeyCode.R)) AutoEquipRecommendedPreset();
+            if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return)) StartLaunchSequence();
         }
 
         AnimateEnvironmentAndObstacles(Time.deltaTime);
@@ -2109,7 +2216,6 @@ public class SpaceMissionPrototype : MonoBehaviour
             UpdateOrbitalSimulation(Time.deltaTime);
         }
 
-        UpdateFlightConsoleVisuals();
         UpdateFairingAndStagingAnimation(Time.deltaTime);
         UpdateAtmosphericSky(spacecraftHub != null ? spacecraftHub.localPosition.y : LaunchpadY);
         UpdateCameraFollow(Time.deltaTime);
@@ -2117,6 +2223,7 @@ public class SpaceMissionPrototype : MonoBehaviour
     }
     void LateUpdate()
     {
+        UpdateFlightConsoleVisuals();
         StyleAndAnimateObstacles();
         StyleEnvironmentAndLaunchpad();
         UpdateRocketExhaustParticles();
@@ -2293,9 +2400,9 @@ public class SpaceMissionPrototype : MonoBehaviour
         if (IsInsideBox(x, y,  1.05f, -3.90f, 2.4f, 0.54f)) { AdjustFuelAndKits(50f, 1); return; }
         if (IsInsideBox(x, y,  5.05f, -3.65f, 3.3f, 0.78f)) { StartLaunchSequence(); return; }
         if (IsInsideBox(x, y,  7.85f, -3.65f, 1.8f, 0.78f)) { ResetToAssembly(); return; }
-        if (currentPhase == MissionPhase.Assembly && IsInsideBox(x, y, -6.35f, -4.45f, 5.4f, 0.85f)) { AutoEquipRecommendedPreset(); return; }
-        if (currentPhase == MissionPhase.Assembly && IsInsideBox(x, y,  5.05f, -4.45f, 3.4f, 0.75f)) { OpenFlightManual(); return; }
-        if (currentPhase == MissionPhase.Assembly && IsInsideBox(x, y,  7.85f, -4.45f, 1.9f, 0.75f)) { ShowTitleScreen(); return; }
+        if (currentPhase == MissionPhase.Assembly && IsInsideBox(x, y, -6.35f, -4.45f, 5.6f, 0.95f)) { AutoEquipRecommendedPreset(); return; }
+        if (currentPhase == MissionPhase.Assembly && IsInsideBox(x, y,  5.05f, -4.45f, 3.6f, 0.85f)) { OpenFlightManual(); return; }
+        if (currentPhase == MissionPhase.Assembly && IsInsideBox(x, y,  7.85f, -4.45f, 2.0f, 0.85f)) { ShowTitleScreen(); return; }
 
         if (currentPhase == MissionPhase.Completed && Camera.main != null)
         {
@@ -2311,21 +2418,22 @@ public class SpaceMissionPrototype : MonoBehaviour
 
     private bool ProcessClickedObjectName(string objName)
     {
-        if (objName == "BTN_LaunchSim")   { StartLaunchSequence(); return true; }
-        if (objName == "BTN_Reset")       { ResetToAssembly(); return true; }
-        if (objName == "BTN_CycleTarget") { OnLeftBlueButtonClicked(); return true; }
-        if (objName == "BTN_CycleRocket") { OnRightBlueButtonClicked(); return true; }
-        if (objName == "BTN_MoreFuel")    { AdjustFuelAndKits(50f, 1); return true; }
-        if (objName == "BTN_LessFuel")    { AdjustFuelAndKits(-50f, -1); return true; }
-        if (objName == "BTN_AutoPreset" || objName == "BTN_AutoPreset_Label" || objName == "BTN_CategorizedAutoPreset" || objName == "BTN_CategorizedAutoPreset_Label") { AutoEquipRecommendedPreset(); return true; }
-        if (objName == "BTN_StripAll" || objName == "BTN_StripAll_Label") { DisassembleAllParts(); return true; }
-        if (objName == "TAB_BTN_STAGES" || objName == "TAB_BTN_STAGES_Label") { SwitchPartsTab(0); return true; }
-        if (objName == "TAB_BTN_POWER" || objName == "TAB_BTN_POWER_Label") { SwitchPartsTab(1); return true; }
-        if (objName == "TAB_BTN_SCIENCE" || objName == "TAB_BTN_SCIENCE_Label") { SwitchPartsTab(2); return true; }
-        if (objName == "BTN_StartMission" || objName == "BTN_StartMission_Label") { StartMissionFromTitle(); return true; }
-        if (objName == "BTN_FlightManual" || objName == "BTN_FlightManual_Label" || objName == "BTN_Manual" || objName == "BTN_Manual_Label") { OpenFlightManual(); return true; }
-        if (objName == "BTN_CloseManual" || objName == "BTN_CloseManual_Label") { CloseFlightManual(); return true; }
-        if (objName == "BTN_Home" || objName == "BTN_Home_Label") { ShowTitleScreen(); return true; }
+        if (objName == "BTN_LaunchSim"   || objName == "BTN_LaunchSim_Border"   || objName == "BTN_LaunchSim_Label")   { StartLaunchSequence(); return true; }
+        if (objName == "BTN_Reset"       || objName == "BTN_Reset_Border"       || objName == "BTN_Reset_Label")       { ResetToAssembly(); return true; }
+        if (objName == "BTN_CycleTarget" || objName == "BTN_CycleTarget_Border" || objName == "BTN_CycleTarget_Label") { OnLeftBlueButtonClicked(); return true; }
+        if (objName == "BTN_CycleRocket" || objName == "BTN_CycleRocket_Border" || objName == "BTN_CycleRocket_Label") { OnRightBlueButtonClicked(); return true; }
+        if (objName == "BTN_MoreFuel"    || objName == "BTN_MoreFuel_Border"    || objName == "BTN_MoreFuel_Label")    { AdjustFuelAndKits(50f, 1); return true; }
+        if (objName == "BTN_LessFuel"    || objName == "BTN_LessFuel_Border"    || objName == "BTN_LessFuel_Label")    { AdjustFuelAndKits(-50f, -1); return true; }
+        if (objName == "BTN_AutoPreset" || objName == "BTN_AutoPreset_Border" || objName == "BTN_AutoPreset_Label" || objName == "BTN_CategorizedAutoPreset" || objName == "BTN_CategorizedAutoPreset_Label") { AutoEquipRecommendedPreset(); return true; }
+        if (objName == "BTN_StripAll" || objName == "BTN_StripAll_Border" || objName == "BTN_StripAll_Label") { DisassembleAllParts(); return true; }
+        if (objName == "TAB_BTN_STAGES" || objName == "TAB_BTN_STAGES_Border" || objName == "TAB_BTN_STAGES_Label") { SwitchPartsTab(0); return true; }
+        if (objName == "TAB_BTN_POWER" || objName == "TAB_BTN_POWER_Border" || objName == "TAB_BTN_POWER_Label") { SwitchPartsTab(1); return true; }
+        if (objName == "TAB_BTN_SCIENCE" || objName == "TAB_BTN_SCIENCE_Border" || objName == "TAB_BTN_SCIENCE_Label") { SwitchPartsTab(2); return true; }
+        if (objName == "BTN_StartMission" || objName == "BTN_StartMission_Border" || objName == "BTN_StartMission_Label") { StartMissionFromTitle(); return true; }
+        if (objName == "BTN_FlightManual" || objName == "BTN_FlightManual_Border" || objName == "BTN_FlightManual_Label" || objName == "BTN_Manual" || objName == "BTN_Manual_Border" || objName == "BTN_Manual_Label") { OpenFlightManual(); return true; }
+        if (objName == "BTN_CloseManual" || objName == "BTN_CloseManual_Border" || objName == "BTN_CloseManual_Label") { CloseFlightManual(); return true; }
+        if (objName == "BTN_Home" || objName == "BTN_Home_Border" || objName == "BTN_Home_Label") { ShowTitleScreen(); return true; }
+        if (objName == "BTN_TestCruise" || objName == "BTN_TestCruise_Border" || objName == "BTN_TestCruise_Label") { BeginInterplanetaryCruise(); return true; }
 
         // Flight Pilot Console
         if (objName == "BTN_Throttle100" || objName == "BTN_Throttle100_Label") { SetFlightThrottle(1.0f); return true; }
@@ -2337,7 +2445,7 @@ public class SpaceMissionPrototype : MonoBehaviour
 
         if (currentPhase == MissionPhase.Assembly)
         {
-            if (objName.StartsWith("PART_CARD_BG_") || objName.StartsWith("PART_TAB_SLOT_") || objName.StartsWith("PART_CARD_LABEL_"))
+            if (objName.StartsWith("PART_CARD_BG_") || objName.StartsWith("PART_TAB_SLOT_") || objName.StartsWith("PART_CARD_LABEL_") || objName.StartsWith("PART_CARD_BORDER_"))
             {
                 string suffix = objName.Substring(objName.LastIndexOf('_') + 1);
                 if (int.TryParse(suffix, out int slotIdx))
@@ -2384,11 +2492,15 @@ public class SpaceMissionPrototype : MonoBehaviour
 
     private void EnsureAutoPresetButtonCreated()
     {
-        string[] toClean = { "BTN_AutoPreset", "BTN_AutoPreset_Border", "BTN_AutoPreset_Label" };
-        foreach (string n in toClean)
+        Transform existing = transform.Find("BTN_AutoPreset");
+        if (existing != null)
         {
-            Transform t = transform.Find(n);
-            if (t != null) Destroy(t.gameObject);
+            existing.gameObject.SetActive(true);
+            Transform border = transform.Find("BTN_AutoPreset_Border");
+            if (border != null) border.gameObject.SetActive(true);
+            Transform label = transform.Find("BTN_AutoPreset_Label");
+            if (label != null) label.gameObject.SetActive(true);
+            return;
         }
 
         // Dedicated Auto-Recommend Button directly under the Parts Panel
@@ -2398,6 +2510,12 @@ public class SpaceMissionPrototype : MonoBehaviour
         autoBtn.transform.localPosition = new Vector3(-6.35f, -4.45f, 0f);
         autoBtn.transform.localScale = new Vector3(5.20f, 0.65f, 0.1f);
         SetRendererColor(autoBtn.GetComponent<Renderer>(), CardDarkBg);
+
+        // Solid 3D BoxCollider with Z-depth so raycasts never miss in builds
+        Collider oldC = autoBtn.GetComponent<Collider>();
+        if (oldC != null) Destroy(oldC);
+        BoxCollider bc = autoBtn.AddComponent<BoxCollider>();
+        bc.size = new Vector3(1f, 1f, 4.0f);
 
         GameObject autoBorder = GameObject.CreatePrimitive(PrimitiveType.Quad);
         autoBorder.name = "BTN_AutoPreset_Border";
@@ -2413,11 +2531,16 @@ public class SpaceMissionPrototype : MonoBehaviour
 
     private void EnsureHomeButtonCreated()
     {
-        string[] toClean = { "BTN_Home", "BTN_Home_Border", "BTN_Home_Label", "BTN_Manual", "BTN_Manual_Border", "BTN_Manual_Label" };
-        foreach (string n in toClean)
+        Transform existing = transform.Find("BTN_Manual");
+        if (existing != null)
         {
-            Transform t = transform.Find(n);
-            if (t != null) Destroy(t.gameObject);
+            existing.gameObject.SetActive(true);
+            transform.Find("BTN_Manual_Border")?.gameObject.SetActive(true);
+            transform.Find("BTN_Manual_Label")?.gameObject.SetActive(true);
+            transform.Find("BTN_Home")?.gameObject.SetActive(true);
+            transform.Find("BTN_Home_Border")?.gameObject.SetActive(true);
+            transform.Find("BTN_Home_Label")?.gameObject.SetActive(true);
+            return;
         }
 
         // Button 1: Flight Manual (x = 5.05f, width = 3.30f) - perfectly aligned under LAUNCH MISSION
@@ -2427,6 +2550,10 @@ public class SpaceMissionPrototype : MonoBehaviour
         manualBtn.transform.localPosition = new Vector3(5.05f, -4.45f, 0f);
         manualBtn.transform.localScale = new Vector3(3.30f, 0.65f, 0.1f);
         SetRendererColor(manualBtn.GetComponent<Renderer>(), CardDarkBg);
+        Collider mCol = manualBtn.GetComponent<Collider>();
+        if (mCol != null) Destroy(mCol);
+        BoxCollider mBc = manualBtn.AddComponent<BoxCollider>();
+        mBc.size = new Vector3(1f, 1f, 4.0f);
 
         GameObject manualBorder = GameObject.CreatePrimitive(PrimitiveType.Quad);
         manualBorder.name = "BTN_Manual_Border";
@@ -2446,6 +2573,10 @@ public class SpaceMissionPrototype : MonoBehaviour
         homeBtn.transform.localPosition = new Vector3(7.85f, -4.45f, 0f);
         homeBtn.transform.localScale = new Vector3(1.80f, 0.65f, 0.1f);
         SetRendererColor(homeBtn.GetComponent<Renderer>(), CardDarkBg);
+        Collider hCol = homeBtn.GetComponent<Collider>();
+        if (hCol != null) Destroy(hCol);
+        BoxCollider hBc = homeBtn.AddComponent<BoxCollider>();
+        hBc.size = new Vector3(1f, 1f, 4.0f);
 
         GameObject homeBorder = GameObject.CreatePrimitive(PrimitiveType.Quad);
         homeBorder.name = "BTN_Home_Border";
@@ -2457,6 +2588,42 @@ public class SpaceMissionPrototype : MonoBehaviour
 
         CreateUIText(transform, "BTN_Home_Label", new Vector3(7.85f, -4.45f, -0.1f),
             "🏠 TITLE", 0.052f, 36, FontStyle.Bold, TextAnchor.MiddleCenter, TextAlignment.Center, DuoGold, 25);
+
+        EnsureCruiseButtonCreated();
+    }
+
+    private void EnsureCruiseButtonCreated()
+    {
+        Transform existing = transform.Find("BTN_TestCruise");
+        if (existing != null)
+        {
+            existing.gameObject.SetActive(true);
+            transform.Find("BTN_TestCruise_Border")?.gameObject.SetActive(true);
+            transform.Find("BTN_TestCruise_Label")?.gameObject.SetActive(true);
+            return;
+        }
+
+        GameObject cruiseBtn = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        cruiseBtn.name = "BTN_TestCruise";
+        cruiseBtn.transform.SetParent(transform, false);
+        cruiseBtn.transform.localPosition = new Vector3(0.50f, -4.45f, 0f);
+        cruiseBtn.transform.localScale = new Vector3(4.90f, 0.65f, 0.1f);
+        SetRendererColor(cruiseBtn.GetComponent<Renderer>(), CardDarkBg);
+        Collider cCol = cruiseBtn.GetComponent<Collider>();
+        if (cCol != null) Destroy(cCol);
+        BoxCollider cBc = cruiseBtn.AddComponent<BoxCollider>();
+        cBc.size = new Vector3(1f, 1f, 4.0f);
+
+        GameObject cruiseBorder = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        cruiseBorder.name = "BTN_TestCruise_Border";
+        cruiseBorder.transform.SetParent(transform, false);
+        cruiseBorder.transform.localPosition = new Vector3(0.50f, -4.49f, 0.05f);
+        cruiseBorder.transform.localScale = new Vector3(4.98f, 0.72f, 0.1f);
+        Destroy(cruiseBorder.GetComponent<Collider>());
+        SetRendererColor(cruiseBorder.GetComponent<Renderer>(), new Color(0.00f, 0.898f, 1.00f)); // CyberCyan
+
+        CreateUIText(transform, "BTN_TestCruise_Label", new Vector3(0.50f, -4.45f, -0.1f),
+            "🚀 DEEP SPACE CRUISE (2M 30S)", 0.048f, 34, FontStyle.Bold, TextAnchor.MiddleCenter, TextAlignment.Center, new Color(0.00f, 0.898f, 1.00f), 25);
     }
 
     private GameObject CreateUIQuad(Transform parent, string name, Vector3 pos, Vector3 scale, Color col, bool hasCollider = false, int sortingOrder = 0)
@@ -2612,6 +2779,9 @@ public class SpaceMissionPrototype : MonoBehaviour
         // Footer attribution
         CreateUIText(titleScreenGroup.transform, "Title_Footer", new Vector3(0f, -2.55f, -0.05f),
             "PRODUCED FOR NASA SPACE APPS CHALLENGE // AEROSPACE SYSTEMS SIMULATOR", 0.052f, 28, FontStyle.Bold, TextAnchor.MiddleCenter, TextAlignment.Center, new Color(0.60f, 0.75f, 0.90f), 25);
+
+        // Keep inactive by default unless explicitly invoked as fallback
+        titleScreenGroup.SetActive(false);
     }
 
     private void CreatePillarCard(Transform parent, float x, float y, string header, Color accentCol, string body)
@@ -2723,6 +2893,12 @@ public class SpaceMissionPrototype : MonoBehaviour
 
     public void ShowTitleScreen()
     {
+        if (Application.CanStreamedLevelBeLoaded("MainMenuScene"))
+        {
+            UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenuScene");
+            return;
+        }
+
         currentPhase = MissionPhase.TitleScreen;
         EnsureTitleScreenCreated();
         if (titleScreenGroup != null) titleScreenGroup.SetActive(true);
@@ -2812,7 +2988,7 @@ public class SpaceMissionPrototype : MonoBehaviour
         else if (selectedTargetIndex == 1) // Lunar Polar Orbit - $1400M budget, 2800 m/s dV, 120 Sci
         {
             selectedRocketIndex = 1; // Falcon 9 NASA-LSP ($80M, 3100kg)
-            fuelMassKg = 550f;
+            fuelMassKg = 750f;
             repairKits = 2;
 
             if (parts != null && parts.Count >= 14)
@@ -2824,11 +3000,11 @@ public class SpaceMissionPrototype : MonoBehaviour
                 parts[11].isInstalled = true; // Payload Fairing Shroud
                 parts[12].isInstalled = true; // Satellite Avionics Bus
                 parts[0].isInstalled = true;  // ROSA Roll-Out Solar
-                parts[1].isInstalled = false; // MMRTG Core
-                parts[2].isInstalled = true;  // Battery
-                parts[3].isInstalled = true;  // Ka-Band Dish
+                parts[1].isInstalled = false; // MMRTG Core (unneeded, ROSA yields +203W positive margin)
+                parts[2].isInstalled = true;  // Battery (410Wh reserve)
+                parts[3].isInstalled = true;  // Ka-Band Dish (+25 Sci)
                 parts[4].isInstalled = true;  // HiRISE Camera (+60 Sci)
-                parts[5].isInstalled = true;  // NEXT-C Ion Thruster
+                parts[5].isInstalled = false; // NEXT-C not needed (chemical stages deliver 3245 m/s > 2800 m/s)
                 parts[6].isInstalled = true;  // THEMIS IR (+35 Sci)
                 parts[13].isInstalled = true; // Magnetometer (+25 Sci)
             }
@@ -3512,31 +3688,66 @@ public class SpaceMissionPrototype : MonoBehaviour
 
         fairingJettisoned = false;
         fairingJettisonTimer = 0f;
-        solarDeployProgress = 0f;
         boosterSeparated = false;
         boosterSepTimer = 0f;
+
+        bool hasFairing = (parts != null && parts.Count > 11 && parts[11] != null && parts[11].isInstalled);
+        solarDeployProgress = hasFairing ? 0f : 1.0f;
+
+        if (fairingShell == null || fairingHalfLeft == null || fairingHalfRight == null)
+        {
+            EnsureFairingHalvesCreated();
+        }
+
+        if (fairingShell != null)
+        {
+            fairingShell.gameObject.SetActive(hasFairing);
+            fairingShell.localPosition = Vector3.zero;
+            fairingShell.localRotation = Quaternion.identity;
+            fairingShell.localScale = Vector3.one;
+        }
+        if (fairingHalfLeft != null)
+        {
+            fairingHalfLeft.gameObject.SetActive(hasFairing);
+            fairingHalfLeft.localPosition = Vector3.zero;
+            fairingHalfLeft.localRotation = Quaternion.identity;
+            fairingHalfLeft.localScale = Vector3.one;
+        }
+        if (fairingHalfRight != null)
+        {
+            fairingHalfRight.gameObject.SetActive(hasFairing);
+            fairingHalfRight.localPosition = Vector3.zero;
+            fairingHalfRight.localRotation = Quaternion.identity;
+            fairingHalfRight.localScale = Vector3.one;
+        }
+        if (hasFairing)
+        {
+            SetFairingOpacity(1.0f);
+        }
 
         UpdateAllRocketHardwareVisuals();
         EnsureFlightConsoleCreated();
         if (flightConsoleGroup != null) flightConsoleGroup.SetActive(false);
 
-        if (fairingHalfLeft != null)
+        if (lowerBoosterStage != null)
         {
-            fairingHalfLeft.gameObject.SetActive(true);
-            fairingHalfLeft.localPosition = Vector3.zero;
-            fairingHalfLeft.localRotation = Quaternion.identity;
+            lowerBoosterStage.localPosition = boosterBaseLocalPos;
+            lowerBoosterStage.localRotation = Quaternion.identity;
+            foreach (SpriteRenderer sr in lowerBoosterStage.GetComponentsInChildren<SpriteRenderer>(true))
+            {
+                if (sr != null)
+                {
+                    Color c = sr.color;
+                    c.a = 1.0f;
+                    sr.color = c;
+                }
+            }
         }
-        if (fairingHalfRight != null)
-        {
-            fairingHalfRight.gameObject.SetActive(true);
-            fairingHalfRight.localPosition = Vector3.zero;
-            fairingHalfRight.localRotation = Quaternion.identity;
-        }
-        SetFairingOpacity(1.0f);
 
         if (parts != null && parts.Count > 0 && parts[0] != null && parts[0].partTransform != null)
         {
-            parts[0].partTransform.localScale = new Vector3(parts[0].mountedScale.x * 0.18f, parts[0].mountedScale.y, parts[0].mountedScale.z);
+            float initialDeploy = hasFairing ? 0.18f : 1.0f;
+            parts[0].partTransform.localScale = new Vector3(parts[0].mountedScale.x * initialDeploy, parts[0].mountedScale.y, parts[0].mountedScale.z);
         }
 
         // Reset all 3 Golden Science Reward Nodes in orbit
@@ -3636,6 +3847,14 @@ public class SpaceMissionPrototype : MonoBehaviour
         curPos.y += throttleSpeed * dt;
         spacecraftHub.localPosition = curPos;
         currentY = curPos.y;
+
+        // Cinematic Liftoff: As soon as rocket clears the launchpad (Y >= LaunchpadY + 3.8f),
+        // transition directly to NASA Loading Screen & Deep Space Horizontal Cruise!
+        if (currentY >= LaunchpadY + 3.8f)
+        {
+            BeginInterplanetaryCruise();
+            return;
+        }
 
         // Acoustic realism: atmospheric wind & exhaust roar drops to vacuum silence upon reaching space
         if (rumbleAudioSource != null && rumbleAudioSource.isPlaying)
@@ -3845,8 +4064,58 @@ public class SpaceMissionPrototype : MonoBehaviour
         // Reached Orbit Center!
         if (currentY >= OrbitCenterY - 0.1f)
         {
-            BeginOrbitalPhase();
+            BeginInterplanetaryCruise();
         }
+    }
+
+    public void BeginInterplanetaryCruise()
+    {
+        currentPhase = MissionPhase.OrbitSimulation;
+        if (rumbleAudioSource != null && rumbleAudioSource.isPlaying) rumbleAudioSource.Stop();
+        if (flightConsoleGroup != null) flightConsoleGroup.SetActive(false);
+        if (fairingShell != null) fairingShell.gameObject.SetActive(false);
+        if (fairingHalfLeft != null) fairingHalfLeft.gameObject.SetActive(false);
+        if (fairingHalfRight != null) fairingHalfRight.gameObject.SetActive(false);
+        if (mapTargetLabel != null) mapTargetLabel.gameObject.SetActive(false);
+        if (rocketExhaustPS != null) rocketExhaustPS.Stop();
+        if (padLiftoffSmokePS != null) padLiftoffSmokePS.Stop();
+
+        SetAssemblyUIVisible(false);
+
+        // Completely hide the vertical Mission Corridor, Launchpad, and Gantry so deep space is clean
+        if (missionCorridorMap != null) missionCorridorMap.gameObject.SetActive(false);
+        GameObject corridorObj = GameObject.Find("Mission_Corridor_Map");
+        if (corridorObj != null) corridorObj.SetActive(false);
+        GameObject earthPadObj = GameObject.Find("Earth_Launch_Label");
+        if (earthPadObj != null) earthPadObj.SetActive(false);
+
+        if (assemblyGantryGroup != null) assemblyGantryGroup.SetActive(false);
+        GameObject gantryObj = GameObject.Find("Custom_Launch_Gantry");
+        if (gantryObj != null) gantryObj.SetActive(false);
+        GameObject earthSurfObj = GameObject.Find("Earth_Surface_Ground");
+        if (earthSurfObj != null) earthSurfObj.SetActive(false);
+
+        Transform pad = transform.Find("Launchpad_Platform");
+        if (pad != null) pad.gameObject.SetActive(false);
+        Transform tower = transform.Find("Launchpad_Service_Tower");
+        if (tower != null) tower.gameObject.SetActive(false);
+
+        // Reset camera to standard orthographic view at (0, 0, -10)
+        if (Camera.main != null)
+        {
+            Camera.main.transform.position = new Vector3(0f, 0f, -10f);
+            Camera.main.orthographicSize = 5.6f;
+        }
+
+        // Start Interplanetary Cruise Manager with the player's assembled rocket
+        InterplanetaryCruiseManager icm = FindAnyObjectByType<InterplanetaryCruiseManager>();
+        if (icm == null)
+        {
+            GameObject icmObj = new GameObject("InterplanetaryCruiseManager");
+            icm = icmObj.AddComponent<InterplanetaryCruiseManager>();
+        }
+
+        icm.StartInterplanetaryCruise(spacecraftHub, selectedTargetIndex, fuelMassKg, hullIntegrity, currentBatteryWh, potentialSciencePts);
     }
 
     private void TriggerObstacleCrisis(int obstacleIdx)
@@ -4019,53 +4288,154 @@ public class SpaceMissionPrototype : MonoBehaviour
 
     public void ResetToAssembly()
     {
+        if (InterplanetaryCruiseManager.Instance != null)
+        {
+            InterplanetaryCruiseManager.Instance.StopCruise();
+        }
+        Transform pad = transform.Find("Launchpad_Platform");
+        if (pad != null) pad.gameObject.SetActive(true);
+        Transform tower = transform.Find("Launchpad_Service_Tower");
+        if (tower != null) tower.gameObject.SetActive(true);
+        if (assemblyGantryGroup != null) assemblyGantryGroup.SetActive(true);
+
         currentPhase = MissionPhase.Assembly;
         countdownTimer = 0f;
         lastCountdownBeepSec = -1;
         flightThrottle = 1.0f;
         flightGimbalOffset = 0f;
         stage1Separated = false;
+        boosterSeparated = false;
+        boosterSepTimer = 0f;
+        fairingJettisoned = false;
+        fairingJettisonTimer = 0f;
+        solarDeployProgress = 1.0f;
         rcsPlumeTimer = 0f;
         debrisHitCooldown = 0f;
         lastStatusBannerHeader = "";
-
-        if (flightConsoleGroup != null) flightConsoleGroup.SetActive(false);
-        if (manualModalObj != null) manualModalObj.SetActive(false);
-        if (rumbleAudioSource != null && rumbleAudioSource.isPlaying)
-            rumbleAudioSource.Stop();
-        if (sfxAudioSource != null && sfxAudioSource.isPlaying)
-            sfxAudioSource.Stop();
         inEclipse = false;
         hullIntegrity = 100f;
+
+        // 1. Immediately snap camera back to Assembly framing (eliminates panning lag and coordinate drift!)
+        if (Camera.main != null)
+        {
+            Camera.main.transform.position = new Vector3(0f, 0f, -15f);
+            Camera.main.orthographicSize = 5.6f;
+        }
+
+        // 2. Stop audio & hide runtime HUD elements
+        if (titleScreenGroup != null) titleScreenGroup.SetActive(false);
+        if (flightConsoleGroup != null) flightConsoleGroup.SetActive(false);
+        if (manualModalObj != null) manualModalObj.SetActive(false);
+        if (rumbleAudioSource != null && rumbleAudioSource.isPlaying) rumbleAudioSource.Stop();
+        if (sfxAudioSource != null && sfxAudioSource.isPlaying) sfxAudioSource.Stop();
         if (crisisHighlightRing != null) crisisHighlightRing.gameObject.SetActive(false);
         if (downlinkPulse0 != null) downlinkPulse0.gameObject.SetActive(false);
         if (downlinkPulse1 != null) downlinkPulse1.gameObject.SetActive(false);
+        if (missionCorridorMap != null) missionCorridorMap.gameObject.SetActive(false);
+        if (mapTargetLabel != null) mapTargetLabel.gameObject.SetActive(true);
 
+        // 3. Stop particle systems & plume effects
+        if (rocketExhaustPS != null) rocketExhaustPS.Stop();
+        if (loxVaporPS != null) loxVaporPS.Stop();
+        if (padLiftoffSmokePS != null) padLiftoffSmokePS.Stop();
+        if (rcsPlumeL != null) rcsPlumeL.gameObject.SetActive(false);
+        if (rcsPlumeR != null) rcsPlumeR.gameObject.SetActive(false);
+
+        // 4. Reset science reward nodes in orbit
         if (scienceRewardNodes != null)
         {
             foreach (var n in scienceRewardNodes)
                 if (n != null) n.gameObject.SetActive(true);
         }
-        if (mapTargetLabel != null) mapTargetLabel.gameObject.SetActive(true);
-        EnsurePartsPanelBounds();
-        EnsureAutoPresetButtonCreated();
-        EnsureHomeButtonCreated();
-        SetAssemblyUIVisible(true);
-        if (missionCorridorMap != null) missionCorridorMap.gameObject.SetActive(false);
+
+        // 5. Reset Spacecraft Hub position, rotation & scale cleanly to Assembly pad
         if (spacecraftHub != null)
         {
             spacecraftHub.gameObject.SetActive(true);
-            spacecraftHub.localPosition = new Vector3(-0.3f, 1.55f, 0f);
+            spacecraftHub.localPosition = new Vector3(-0.3f, 0.50f, 0f);
             spacecraftHub.localRotation = Quaternion.identity;
-            spacecraftHub.localScale = new Vector3(2.45f, 2.45f, 1f);
+            spacecraftHub.localScale = new Vector3(2.5f, 2.5f, 1f);
         }
 
+        // 6. Fully restore Lower Booster Stage position, rotation & opacity
+        if (lowerBoosterStage != null)
+        {
+            lowerBoosterStage.localPosition = boosterBaseLocalPos;
+            lowerBoosterStage.localRotation = Quaternion.identity;
+            foreach (SpriteRenderer sr in lowerBoosterStage.GetComponentsInChildren<SpriteRenderer>(true))
+            {
+                if (sr != null)
+                {
+                    Color c = sr.color;
+                    c.a = 1.0f;
+                    sr.color = c;
+                }
+            }
+        }
+
+        // 7. Fully restore Fairing Shroud halves position, rotation & assembly opacity
         fairingJettisoned = false;
         fairingJettisonTimer = 0f;
         solarDeployProgress = 1.0f;
-        boosterSeparated = false;
-        boosterSepTimer = 0f;
+        bool hasFairingOnReset = (parts != null && parts.Count > 11 && parts[11] != null && parts[11].isInstalled);
 
+        if (fairingShell == null || fairingHalfLeft == null || fairingHalfRight == null)
+        {
+            EnsureFairingHalvesCreated();
+        }
+
+        if (fairingShell != null)
+        {
+            fairingShell.gameObject.SetActive(hasFairingOnReset);
+            fairingShell.localPosition = Vector3.zero;
+            fairingShell.localRotation = Quaternion.identity;
+            fairingShell.localScale = Vector3.one;
+        }
+        if (fairingHalfLeft != null)
+        {
+            fairingHalfLeft.gameObject.SetActive(hasFairingOnReset);
+            fairingHalfLeft.localPosition = Vector3.zero;
+            fairingHalfLeft.localRotation = Quaternion.identity;
+            fairingHalfLeft.localScale = Vector3.one;
+        }
+        if (fairingHalfRight != null)
+        {
+            fairingHalfRight.gameObject.SetActive(hasFairingOnReset);
+            fairingHalfRight.localPosition = Vector3.zero;
+            fairingHalfRight.localRotation = Quaternion.identity;
+            fairingHalfRight.localScale = Vector3.one;
+        }
+        if (hasFairingOnReset)
+        {
+            SetFairingOpacity(0.25f);
+        }
+
+        // 8. Fully restore all subsystem mounting offsets & scales
+        if (parts != null)
+        {
+            for (int i = 0; i < parts.Count; i++)
+            {
+                if (parts[i] == null || parts[i].partTransform == null) continue;
+                parts[i].partTransform.localPosition = parts[i].busLocalOffset;
+                parts[i].partTransform.localRotation = Quaternion.identity;
+                parts[i].partTransform.localScale = parts[i].mountedScale;
+            }
+        }
+
+        // 9. Restore propellant, repair kits, battery & science buffers
+        if (fuelMassKg < 150f) fuelMassKg = 450f;
+        repairKits = Mathf.Max(2, repairKits);
+        currentBatteryWh = batteryCapacityWh;
+
+        // 10. Ensure UI panels, buttons & bounds are active and ready for clicks
+        EnsurePartsPanelBounds();
+        EnsureCategorizedPartsPanel();
+        EnsureAutoPresetButtonCreated();
+        EnsureHomeButtonCreated();
+        SetAssemblyUIVisible(true);
+        Physics.SyncTransforms();
+
+        // 11. Refresh hardware visuals, parts catalog UI, telemetry & status board
         UpdateAllRocketHardwareVisuals();
         RefreshCategorizedPartsUI();
         RecalculateTelemetry();
@@ -4435,6 +4805,15 @@ public class SpaceMissionPrototype : MonoBehaviour
 
     private void StyleEnvironmentAndLaunchpad()
     {
+        // If Deep Space Cruise is active, hide launch gantry and Earth ground completely!
+        if (currentPhase == MissionPhase.OrbitSimulation || 
+            (InterplanetaryCruiseManager.Instance != null && InterplanetaryCruiseManager.Instance.IsCruiseActive))
+        {
+            if (assemblyGantryGroup != null && assemblyGantryGroup.activeSelf) 
+                assemblyGantryGroup.SetActive(false);
+            return;
+        }
+
         float t = Time.time;
         Shader unlit = Shader.Find("Unlit/Color");
         bool isAssemblyOrTitle = (currentPhase == MissionPhase.Assembly || currentPhase == MissionPhase.TitleScreen);
